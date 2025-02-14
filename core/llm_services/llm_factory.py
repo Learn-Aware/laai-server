@@ -1,7 +1,6 @@
 # from mistral_api import MistralAPI
 from typing import List, Dict
 from .mistral_api import MistralAPI
-from .openrouter_api import OpenRouterAPI
 
 class LLMFactory:
     """
@@ -23,11 +22,5 @@ class LLMFactory:
             return MistralAPI(model = model,
                               tool_metadata=tool_metadata, 
                               use_tools=use_tools)
-        elif api_type == "openrouter":
-            if not config or "name" not in config:
-                raise ValueError("OpenAI requires a configuration dictionary.")
-            return OpenRouterAPI(
-                model_name=config["name"]
-            )
         else:
             raise ValueError(f"Unsupported API type: {api_type}")
