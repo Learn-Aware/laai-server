@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from controllers.socratic_tutor_controller import router as socratic_tutor_router
 from controllers.cached_augmented_generation_controller import router as cag_router
 from controllers.user_controller import router as user_router
+from controllers.conversation_controller import router as conversation_router
 
 
 app = FastAPI(
@@ -33,6 +34,10 @@ app.include_router(
 )
 
 app.include_router(user_router, prefix="/api/v1/auth", tags=["User Authentication"])
+
+app.include_router(
+    conversation_router, prefix="/api/v1/conversations", tags=["Conversations"]
+)
 
 
 @app.get("/")
