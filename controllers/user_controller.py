@@ -16,7 +16,7 @@ async def create_user(user: User):
     return await UserService.create_user(user)
 
 
-@router.get("/users/{email}", response_model=Dict[str, Any])
+@router.get("/user/{email}", response_model=Dict[str, Any])
 async def get_user_by_email(email: str):
     return await UserService.get_user_by_email(email)
 

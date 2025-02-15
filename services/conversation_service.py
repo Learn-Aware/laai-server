@@ -19,21 +19,43 @@ class ConversationService:
                     detail="No conversations provided",
                 )
 
-            conversation_docs = [
-                {
-                    "user_email": user_email,
-                    "session_id": conversation.id,
-                    "messages": [msg.model_dump() for msg in conversation.messages],
-                }
-                for conversation in conversations
-            ]
+            inserted_count = 0
+            updated_count = 0
 
-            result = conversation_collection.insert_many(conversation_docs)
+            for conversation in conversations:
+                # Check if a conversation with the same session_id already exists
+                existing_conversation = conversation_collection.find_one(
+                    {"user_email": user_email, "session_id": conversation.id}
+                )
+
+                if existing_conversation:
+                    # Update the existing conversation
+                    result = conversation_collection.update_one(
+                        {"_id": existing_conversation["_id"]},
+                        {
+                            "$set": {
+                                "messages": [
+                                    msg.model_dump() for msg in conversation.messages
+                                ]
+                            }
+                        },
+                    )
+                    if result.modified_count > 0:
+                        updated_count += 1
+                else:
+                    # Insert a new conversation
+                    conversation_doc = {
+                        "user_email": user_email,
+                        "session_id": conversation.id,
+                        "messages": [msg.model_dump() for msg in conversation.messages],
+                    }
+                    conversation_collection.insert_one(conversation_doc)
+                    inserted_count += 1
 
             return {
-                "message": f"Conversations for {user_email} saved successfully",
-                "inserted_count": len(result.inserted_ids),
-                "inserted_ids": [str(_id) for _id in result.inserted_ids],
+                "message": f"Conversations for {user_email} processed successfully",
+                "inserted_count": inserted_count,
+                "updated_count": updated_count,
             }
 
         except PyMongoError as e:
@@ -100,6 +122,47 @@ class ConversationService:
 
             return {
                 "message": f"Conversation with session_id {session_id} deleted successfully"
+            }
+
+        except PyMongoError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+            )
+
+    @staticmethod
+    async def update_conversation(
+        user_email: str, session_id: str, conversations: List[Conversation]
+    ) -> Dict[str, Any]:
+        try:
+            if not conversations:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No conversations provided",
+                )
+
+            conversation_doc = conversation_collection.find_one(
+                {"user_email": user_email, "session_id": session_id}
+            )
+
+            if not conversation_doc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Conversation with session_id {session_id} not found",
+                )
+
+            conversation_collection.update_one(
+                {"user_email": user_email, "session_id": session_id},
+                {
+                    "$set": {
+                        "messages": [
+                            msg.model_dump() for msg in conversations[0].messages
+                        ]
+                    }
+                },
+            )
+
+            return {
+                "message": f"Conversation with session_id {session_id} updated successfully"
             }
 
         except PyMongoError as e:
