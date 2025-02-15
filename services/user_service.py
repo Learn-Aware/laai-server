@@ -53,30 +53,16 @@ class UserService:
             )
 
     @staticmethod
-    async def get_user_by_email(email: str) -> Dict[str, Any]:
-        try:
-            user = users_collection.find_one({"email": email})
-            if user:
-                user["_id"] = str(user["_id"])
-                return {
-                    "data": user,
-                    "status": status.HTTP_200_OK,
-                    "message": "User fetched successfully.",
-                }
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User with this email does not exist.",
-                )
-        except PyMongoError as e:
+    async def get_user_by_email(email: str) -> User:
+        user = users_collection.find_one({"email": email})
+
+        if user:
+            user["_id"] = str(user["_id"])
+            return user
+        else:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error while fetching user by email.",
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="An unexpected error occurred while fetching user by email.",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found with the provided email.",
             )
 
     @staticmethod
