@@ -23,11 +23,16 @@ async def get_conversation(user_email: str, session_id: str):
     return await ConversationService.get_conversation(user_email, session_id)
 
 
-@router.delete("/{user_email}/{session_id}")
-async def delete_conversation(user_email: str, session_id: str):
-    return await ConversationService.delete_conversation(user_email, session_id)
+# @router.delete("/{user_email}/{session_id}")
+# async def delete_conversation(user_email: str, session_id: str):
+#     return await ConversationService.delete_conversation(user_email, session_id)
+
 
 # Check user email and session id after updating the conversation
 @router.put("/{user_email}/{session_id}")
-async def update_conversation(user_email: str, session_id: str, request: ConversationRequest):
-    return await ConversationService.update_conversation(user_email, session_id, request.conversations)
+async def update_conversation(
+    user_email: str, session_id: str, request: ConversationRequest
+):
+    return await ConversationService.update_conversation(
+        user_email, session_id, request.conversations
+    )
