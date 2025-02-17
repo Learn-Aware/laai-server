@@ -21,6 +21,6 @@ async def get_user_by_email(email: str):
     return await UserService.get_user_by_email(email)
 
 
-# @router.delete("/users")
-# async def delete_users():
-#     return await UserService.delete_users()
+@router.delete("/users")
+async def delete_users():
+    return await UserService.delete_users()
