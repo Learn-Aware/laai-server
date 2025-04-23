@@ -1,9 +1,9 @@
 from typing import Dict, Any, List
 from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
-from configs.mongo_config import conversation_collection
 from models.conversation import Conversation, Message
 from fastapi.encoders import jsonable_encoder
+from dal import conversation_dal
 
 
 class ConversationService:
@@ -23,24 +23,22 @@ class ConversationService:
             updated_count = 0
 
             for conversation in conversations:
-                # Check if a conversation with the same session_id already exists
-                existing_conversation = conversation_collection.find_one(
-                    {"user_email": user_email, "session_id": conversation.id}
-                )
-
-                if existing_conversation:
+                # Try to find existing conversations with this session_id
+                filter_dict = {"user_email": user_email, "session_id": conversation.id}
+                existing_conversations = await conversation_dal.find_all_filtered(filter_dict)
+                
+                if existing_conversations:
                     # Update the existing conversation
-                    result = conversation_collection.update_one(
-                        {"_id": existing_conversation["_id"]},
-                        {
-                            "$set": {
-                                "messages": [
-                                    msg.model_dump() for msg in conversation.messages
-                                ]
-                            }
-                        },
+                    existing_conv = existing_conversations[0]  # Take the first one if multiple
+                    update_data = {
+                        "messages": [msg.model_dump() for msg in conversation.messages]
+                    }
+                    
+                    result = await conversation_dal.update_one(
+                        {"_id": existing_conv["_id"]},
+                        update_data
                     )
-                    if result.modified_count > 0:
+                    if result.get("modified", False):
                         updated_count += 1
                 else:
                     # Insert a new conversation
@@ -49,7 +47,7 @@ class ConversationService:
                         "session_id": conversation.id,
                         "messages": [msg.model_dump() for msg in conversation.messages],
                     }
-                    conversation_collection.insert_one(conversation_doc)
+                    await conversation_dal.insert_one(conversation_doc)
                     inserted_count += 1
 
             return {
@@ -58,38 +56,43 @@ class ConversationService:
                 "updated_count": updated_count,
             }
 
-        except PyMongoError as e:
+        except Exception as e:
+            # The DAL already handles most exceptions, this is just for unexpected errors
+            if isinstance(e, HTTPException):
+                raise e
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An unexpected error occurred while saving conversations: {str(e)}"
             )
 
     @staticmethod
     async def get_session_ids(user_email: str) -> List[str]:
         try:
-            conversation_docs = conversation_collection.find(
-                {"user_email": user_email}, {"session_id": 1}
-            )
-
-            return [doc["session_id"] for doc in conversation_docs]
-
-        except PyMongoError as e:
+            return await conversation_dal.get_conversations_by_email(user_email)
+        except Exception as e:
+            # The DAL already handles most exceptions, this is just for unexpected errors
+            if isinstance(e, HTTPException):
+                raise e
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An unexpected error occurred while fetching session IDs: {str(e)}"
             )
 
     @staticmethod
     async def get_conversation(user_email: str, session_id: str) -> dict:
         try:
-            conversation_doc = conversation_collection.find_one(
-                {"user_email": user_email, "session_id": session_id}
-            )
+            # Try to find the conversation
+            filter_dict = {"user_email": user_email, "session_id": session_id}
+            conversations = await conversation_dal.find_all_filtered(filter_dict)
 
-            if not conversation_doc:
+            if not conversations:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Conversation with session_id {session_id} not found",
                 )
 
+            conversation_doc = conversations[0]  # Take the first one if multiple
+            
             conversation = Conversation(
                 id=conversation_doc["session_id"],
                 messages=[
@@ -102,19 +105,22 @@ class ConversationService:
                 "conversation": jsonable_encoder(conversation),
             }
 
-        except PyMongoError as e:
+        except Exception as e:
+            # The DAL already handles most exceptions, this is just for unexpected errors
+            if isinstance(e, HTTPException):
+                raise e
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An unexpected error occurred while fetching conversation: {str(e)}"
             )
 
     @staticmethod
     async def delete_conversation(user_email: str, session_id: str) -> Dict[str, Any]:
         try:
-            result = conversation_collection.delete_one(
-                {"user_email": user_email, "session_id": session_id}
-            )
+            filter_dict = {"user_email": user_email, "session_id": session_id}
+            result = await conversation_dal.delete_many(filter_dict)
 
-            if not result.deleted_count:
+            if result["count"] == 0:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Conversation with session_id {session_id} not found",
@@ -124,9 +130,13 @@ class ConversationService:
                 "message": f"Conversation with session_id {session_id} deleted successfully"
             }
 
-        except PyMongoError as e:
+        except Exception as e:
+            # The DAL already handles most exceptions, this is just for unexpected errors
+            if isinstance(e, HTTPException):
+                raise e
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An unexpected error occurred while deleting conversation: {str(e)}"
             )
 
     @staticmethod
@@ -140,32 +150,32 @@ class ConversationService:
                     detail="No conversations provided",
                 )
 
-            conversation_doc = conversation_collection.find_one(
-                {"user_email": user_email, "session_id": session_id}
-            )
+            # Check if the conversation exists
+            filter_dict = {"user_email": user_email, "session_id": session_id}
+            existing_conversations = await conversation_dal.find_all_filtered(filter_dict)
 
-            if not conversation_doc:
+            if not existing_conversations:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Conversation with session_id {session_id} not found",
                 )
 
-            conversation_collection.update_one(
-                {"user_email": user_email, "session_id": session_id},
-                {
-                    "$set": {
-                        "messages": [
-                            msg.model_dump() for msg in conversations[0].messages
-                        ]
-                    }
-                },
-            )
+            # Update the conversation
+            update_data = {
+                "messages": [msg.model_dump() for msg in conversations[0].messages]
+            }
+            
+            await conversation_dal.update_one(filter_dict, update_data)
 
             return {
                 "message": f"Conversation with session_id {session_id} updated successfully"
             }
 
-        except PyMongoError as e:
+        except Exception as e:
+            # The DAL already handles most exceptions, this is just for unexpected errors
+            if isinstance(e, HTTPException):
+                raise e
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An unexpected error occurred while updating conversation: {str(e)}"
             )
