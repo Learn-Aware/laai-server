@@ -1,0 +1,17 @@
+venv/
+src/__pycache__/
+__pycache__/
+src/agent/__pycache__/
+src/agent/classifier/__pycache__/
+src/agent/complex_solver/__pycache__/
+src/agent/critic/__pycache__/
+src/agent/simple_solver/__pycache__/
+src/agent/socratic/__pycache__/
+src/auth/__pycache__/
+src/chat/__pycache__/
+src/configs/__pycache__/
+src/db/__pycache__/
+src/utils/__pycache__/
+
+
+.env
